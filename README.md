@@ -9,7 +9,7 @@ by Coleman Clougherty (cclougherty@ucsd.edu) and Jamera Mellyn Fernando (jmferna
 
 In this project, our data comes from food.com, which is an online social networking featuring recipes from home cooks and celebrity chefs. The website features more than 500,000 user-generated recipes, to which users can add reviews, modficiations, questions, and photos. 
 
-This data has 83,782 rows, and includes columns such as:
+The data comes from two CSV files: RAW_recipes.csv, which contains recipes and RAW_interactions.csv, which contains reviews and ratings submitted for recipes in RAW_recipes.csv. The merged dataset has 83,782 rows, and includes columns such as:
 - 'name' (str): describes the recipe nane 
 - 'minutes' (int): minutes to prepare recipe 
 - 'tags' (str): Food.com tags for recipes 
@@ -24,7 +24,10 @@ Given this, we wanted to investigate the question: **what is the relationship be
 
 ## Cleaning and EDA
 
-<iframe src="assets/10-80-enrollment.html" width=800 height=600 frameBorder=0></iframe>
+Describe, in detail, the data cleaning steps you took and how they affected your analyses. The steps should be explained in reference to the data generating process. Show the head of your cleaned DataFrame (see Part 2: Report for instructions).
+
+**DATA CLEANING**
+1. We first merged using a left merge with the two raw datasets and created a column containing the average rating per recipe using a groupby function. We filled all rating of 0 with np.nan because ratings with 0 signifies that the user has not rated the recipe, so the value 0 has no real meaning. 
 
 ---
 
