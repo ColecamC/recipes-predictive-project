@@ -102,15 +102,18 @@ We created a new dataframe with recipes that have continent tags, which contains
 
 **Sample of continent-tagged recipes:**
 
-| id      | continent_of_origin | value | name                              | sodium | protein | saturated_fat | carbohydrates |
-|---------|---------------------|-------|-----------------------------------|--------|---------|---------------|---------------|
-| 453467  | north-american      | True  | 1 in canada chocolate chip cookies| 22.0   | 13.0    | 51.0          | 26.0          |
-| 286009  | north-american      | True  | millionaire pound cake            | 13.0   | 20.0    | 123.0         | 39.0          |
-| 333797  | north-american      | True  | after med flsk pea soup with pork | 34.0   | 44.0    | 12.0          | 0.0           |
-| ...     | ...                 | ...   | ...                               | ...    | ...     | ...           | ...           |
-| 359208  | australian          | True  | zucchini milano                   | 1.0    | 2.0     | 0.0           | 1.0           |
-| 349024  | australian          | True  | zucchini mustard chicken burgers  | 6.0    | 53.0    | 5.0           | 12.0          |
-| 441846  | australian          | True  | zucchini feta and dill pie        | 47.0   | 50.0    | 69.0          | 7.0           |
+| id | continent_of_origin | name |
+|----|---------------------|------|
+| 453467 | north-american | 1 in canada chocolate chip cookies |
+| 286009 | north-american | millionaire pound cake |
+| 333797 | north-american | after med flsk pea soup with pork |
+| ... | ... | ... |
+| 359208 | australian | zucchini milano |
+| 349024 | australian | zucchini mustard chicken burgers |
+| 441846 | australian | zucchini feta and dill pie |
+
+For readability, additional columns (e.g., sodium, protein, saturated_fat, carbohydrates, and tag indicators) are omitted. The full dataset is used in all analyses.
+
 
 The continent-tagged dataset represents 37.82% of the total recipes dataset, indicating that a significant portion of recipes have identifiable continent-of-origin tags.
 
@@ -186,24 +189,8 @@ This aggregate table reveals some interesting patterns. North American and Europ
 | Column            | Missing Count |
 |-------------------|---------------|
 | name              | 1             |
-| id                | 0             |
-| minutes           | 0             |
-| contributor_id    | 0             |
-| submitted         | 0             |
-| n_steps           | 0             |
-| steps             | 0             |
 | description       | 70            |
-| ingredients       | 0             |
-| n_ingredients     | 0             |
 | avg_rating        | 2,609         |
-| tags_list         | 0             |
-| calories          | 0             |
-| total_fat         | 0             |
-| sugar             | 0             |
-| sodium            | 0             |
-| protein           | 0             |
-| saturated_fat     | 0             |
-| carbohydrates     | 0             |
 
 **NMAR ANALYSIS**
 
@@ -319,5 +306,63 @@ This result aligns with our earlier exploratory analysis, which showed that Nort
 
 ---
 
-### Framing a Prediction Problem
+## Framing a Prediction Problem
 
+### Prediction Problem
+
+Building on our exploratory analysis and hypothesis testing, we aim to **predict the continent of origin for recipes** based on different features (e.g. minutes, ingredients, calories). This prediction problem is an extension of our investigation into the relationship between recipe characteristics and geographical origin.
+
+**Problem Type:** Multiclass Classification
+
+**Response Variable:** `continent_of_origin` (with classes: north-american, south-american, european, asian, african, australian)
+
+**Why we chose this response variable:** 
+
+We selected `continent_of_origin` as our response variable because it represents a meaningful and well-defined categorization of recipes based on their culinary traditions. The continent tags in our dataset were pre-classified by Food.com users based on the recipe's cultural origin, providing reliable ground truth labels. 
+
+### Features at Time of Prediction
+
+At the "time of prediction," we would only have access to the information that would be available when a recipe is first submitted, before any user engagement occurs. We will train our model using the following features:
+
+**Nutritional Features:**
+- `calories`: Total caloric content
+- `total_fat`: Total fat content (% daily value)
+- `sugar`: Sugar content (% daily value)
+- `sodium`: Sodium content (% daily value)
+- `protein`: Protein content (% daily value)
+- `saturated_fat`: Saturated fat content (% daily value)
+- `carbohydrates`: Carbohydrate content (% daily value)
+
+**Structural Features:**
+- `minutes`: Cooking time
+- `n_steps`: Number of preparation steps
+- `n_ingredients`: Number of ingredients
+
+**Features we will NOT use:**
+- Any `tags` (including the continent tags themselves, as these would leak information about our target variable)
+- `description` or `name`: While these might contain helpful information, they could directly reference the continent (e.g., "Mexican salsa"), which would be cheating
+- User engagement metrics (reviews, ratings): Not available at submission time
+
+This feature selection ensures our model learns from objective, measurable recipe characteristics rather than relying on labels or post-publication information.
+
+### Evaluation Metric
+
+**Primary Metric: F1-Score (Macro-Averaged)**
+
+We chose F1-score as our primary evaluation metric for several important reasons:
+
+1. **Class Imbalance:** Our dataset has significant class imbalance, with North American recipes (14,590) vastly outnumbering South American recipes (689). Accuracy would be misleading in this context—a naive model that always predicts "north-american" would achieve high accuracy but would be completely useless for identifying recipes from underrepresented continents.
+
+2. **Balanced Precision and Recall:** F1-score is the harmonic mean of precision and recall, giving us a single metric that balances both **Precision** and **Recall.**
+
+3. **Macro-Averaging:** We will use macro-averaged F1-score, which computes the F1-score for each continent separately and then takes the unweighted average. This treats all continents equally regardless of their sample size, ensuring our model performs reasonably well across all regions rather than just optimizing for the majority class.
+
+**Why not other metrics?**
+- **Accuracy:** Would be dominated by performance on North American recipes and could hide poor performance on minority classes
+- **Micro-averaged F1:** Would weight continents by their sample size, effectively making it similar to accuracy
+- **Precision alone:** Would not penalize a model that achieves high precision by being overly conservative (low recall)
+- **Recall alone:** Would not penalize a model that predicts everything as every class (low precision)
+
+By using macro-averaged F1-score, we ensure our model is evaluated fairly across all continents and provides balanced performance between precision and recall.
+
+---
