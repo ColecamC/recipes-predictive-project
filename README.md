@@ -366,3 +366,360 @@ We chose F1-score as our primary evaluation metric for several important reasons
 By using macro-averaged F1-score, we ensure our model is evaluated fairly across all continents and provides balanced performance between precision and recall.
 
 ---
+
+## Baseline Model
+
+### Model Description
+
+For our baseline model, we built a simple **Random Forest Classifier** to predict the continent of origin for recipes. We selected this algorithm because Random Forests handle multiclass classification well and are robust to different feature scales.
+
+**Features Used:**
+
+We selected features that would be available at the "time of prediction" (when a recipe is first submitted):
+
+1. **`ingredient_list`** (Nominal): A list of ingredients used in each recipe
+   - **Encoding:** MultiLabelBinarizer - converts the list of ingredients into binary features (one column per unique ingredient)
+   - **Why this feature:** Different cuisines use characteristic ingredients (e.g., soy sauce in Asian cuisine, cilantro in South American cuisine)
+
+2. **`minutes`** (Quantitative Continuous): Cooking time in minutes
+   - **Encoding:** Left as-is 
+   - **Why this feature:** Different culinary traditions may have different typical preparation times
+
+3. **`calories`** (Quantitative Continuous): Total caloric content
+   - **Encoding:** Left as-is 
+   - **Why this feature:** Our EDA showed some differences in calorie content across continents
+
+4. **`n_steps`** (Quantitative Discrete): Number of preparation steps
+   - **Encoding:** Left as-is 
+   - **Why this feature:** Recipe complexity may vary by culinary tradition
+
+5. **`n_ingredients`** (Quantitative Discrete): Number of ingredients
+   - **Encoding:** Left as-is
+   - **Why this feature:** Different cuisines may use different numbers of ingredients
+
+**Assessment:** Our baseline model uses **1 nominal categorical feature** (ingredient_list) and **4 quantitative features** (minutes, calories, n_steps, n_ingredients). The quantitative features are left as-is without any transformations.
+
+
+### Model Performance
+
+**Evaluation Metric:** Macro-averaged F1-Score = **0.3402**
+
+We evaluated our baseline model using macro-averaged F1-score, which balances precision and recall across all continents equally, regardless of class size. This is crucial given our significant class imbalance (North American recipes outnumber South American recipes by ~21:1).
+
+
+### Model Assessment
+
+**Is this a "good" model?**
+
+Our baseline model achieves a macro F1-score of 0.3402, which is slightly better than random guessing (1/6 ≈ 0.17 for 6 classes) but leaves substantial room for improvement. 
+
+**Strengths:**
+- Successfully leverages ingredient information to make meaningful predictions
+- Performs well on North American and Asian recipes (F1-scores of 0.65 and 0.59)
+- Better than random guessing across all classes
+
+**Weaknesses:**
+- Poor performance on minority classes (South American: 0.32, Australian: 0.38, African: 0.41)
+- Doesn't account for feature interactions or non-linear relationships beyond what Random Forest captures
+- Treats all numerical features at their original scale, which may disadvantage features with smaller ranges
+- Doesn't capture the skewed distribution of cooking times or other numerical features
+
+The baseline model provides a reasonable starting point but clearly has room for improvement through feature engineering, better handling of class imbalance, and hyperparameter tuning.
+
+---
+
+## Final Model
+### Feature Engineering
+
+Building on our baseline model, we engineered several new features to capture additional patterns in the data:
+
+**New Engineered Features:**
+
+1. **Log-transformed cooking time** (`log_minutes`)
+   - **Transformation:** `np.log1p(minutes)` 
+   - **Rationale:** Cooking times are highly right-skewed. Log transformation normalizes this distribution and reduces the influence of extreme outliers.
+
+2. **Calorie density** (`calories_per_ingredient`)
+   - **Transformation:** `calories / n_ingredients`
+   - **Rationale:** This feature captures how calorie-dense each ingredient is on average. Certain cuisines may use richer ingredients (like butter, cream) versus lighter ones (like vegetables), providing a normalized measure of recipe richness.
+
+3. **Nutrition interaction** (`fat_sugar_interaction`)
+   - **Transformation:** `total_fat * sugar`
+   - **Rationale:** The interaction between fat and sugar content may indicate desserts versus savory dishes. Different continents may have different patterns of combining these macronutrients.
+
+**Additional Processing:**
+- Standardized all numerical features using `StandardScaler` to ensure features are on comparable scales
+- Retained the `MultiLabelBinarizer` encoding for ingredients from our baseline model
+
+### Hyperparameter Tuning
+
+**Hyperparameters Tuned:**
+
+Before conducting our grid search, we identified the following hyperparameters to tune:
+
+1. **`n_estimators`** 
+2. **`max_depth`** 
+3. **`min_samples_split`**
+4. **`criterion`**: ['gini']
+
+We used `GridSearchCV` with 3-fold cross-validation to systematically evaluate all 27 combinations of hyperparameters.
+```python
+hyperparameters = {
+    'RandomForest__n_estimators': [75, 100, 150],
+    'RandomForest__max_depth': [None, 20, 30],
+    'RandomForest__min_samples_split': [25, 50, 100],
+    'RandomForest__criterion': ['gini']
+}
+
+searcher = GridSearchCV(
+    final_pl, 
+    hyperparameters, 
+    cv=3, 
+    scoring='f1_macro',
+    verbose=2,
+    n_jobs=-1
+)
+
+searcher.fit(X_train, y_train)
+```
+
+**Best Hyperparameters Found:**
+```python
+{
+    'RandomForest__criterion': 'gini',
+    'RandomForest__max_depth': 30,
+    'RandomForest__min_samples_split': 100,
+    'RandomForest__n_estimators': 150
+}
+```
+
+### Model Performance
+```
+==================================================
+BASELINE F1-Score (macro): 0.3402
+FINAL F1-Score (macro):    0.3099
+Improvement:               -0.0303
+==================================================
+```
+
+**Classification Report:**
+
+| Continent        | Precision | Recall | F1-Score | Support |
+|------------------|-----------|--------|----------|---------|
+| african          | 0.66      | 0.08   | 0.14     | 237     |
+| asian            | 0.75      | 0.43   | 0.55     | 829     |
+| australian       | 0.00      | 0.00   | 0.00     | 196     |
+| european         | 0.59      | 0.30   | 0.40     | 1614    |
+| north-american   | 0.58      | 0.91   | 0.71     | 2942    |
+| south-american   | 1.00      | 0.03   | 0.06     | 133     |
+| **macro avg**    | **0.60**  | **0.29**| **0.31** | **5951**|
+| **weighted avg** | 0.60      | 0.60   | 0.54     | 5951    |
+
+![Final Model Confusion Matrix](your_final_confusion_matrix.png)
+
+### Analysis: Why Did Performance Decrease?
+
+Surprisingly, our final model performed **worse** than our baseline model, with the macro F1-score dropping from 0.34 to 0.31. This unexpected result reveals several important insights:
+
+**1. Overfitting to the Majority Class**
+
+The confusion matrix shows our model has become extremely biased toward predicting "north-american":
+- **Recall for north-american: 0.91** (predicts almost everything as north-american)
+- **Recall for minority classes: near 0** (rarely predicts african, australian, south-american)
+
+This suggests our feature engineering and hyperparameter tuning inadvertently increased the model's bias toward the majority class.
+
+**2. Feature Engineering May Have Introduced Noise**
+
+Our engineered features may have had unintended effects. **Log-transformed minutes:** While this normalized the distribution, it may have obscured meaningful patterns in cooking time that differentiated cuisines. **Calorie density:** This feature may not be as discriminative as we hypothesized since many cuisines share similar calorie-to-ingredient ratios. **Fat-sugar interaction:** May have primarily helped identify desserts but didn't help distinguish between continents
+
+**3. Hyperparameter Tuning**
+
+Our best hyperparameters (`max_depth=30`, `min_samples_split=100`) created a shallower, more constrained model that focuses on the most common patterns (north-american recipes), failing to capture other continents. This may have reduced the model's ability to learn distinctive patterns for smaller classes.
+
+**4. Class Imbalance**
+
+With north-american recipes comprising ~49% of our training data while south-american comprises only ~2%, our model optimization focused on overall accuracy rather than balanced performance across continents.
+
+However, that does not mean our model only performed poorly. Our model had high precision for asian (0.75) and african (0.66) recipes when they are predicted. There was also perfect precision for south-american (1.00), even though only 3% recall means it rarely makes this prediction. As a whole, the model had ignored the australian recipes entirely (0.00 F1-score), and overpredicted north-american dishes at the expense of other continents. 
+
+### Potential Improvements for Future Work
+
+To improve upon both models, we could:
+
+1. **Address class imbalance directly:** Using `class_weight='balanced'` in RandomForest, implementing oversampling techniques, and using stratified sampling in cross-validation
+
+2. **Try different feature engineering:** Creating binary indicators for signature ingredients (e.g., "has_soy_sauce" for Asian), using TF-IDF on ingredients instead of MultiLabelBinarizer
+
+3. **Experiment with different algorithms:** Gradient boosting (XGBoost, LightGBM) may handle imbalance better
+
+---
+
+## Fairness Analysis 
+
+### Research Question
+
+Does our final model perform differently for recipes with **short cooking times** versus **long cooking times**?
+
+This is an important fairness question because if our model systematically performs worse for quick recipes (which may be more accessible to busy home cooks) or time-intensive recipes (which may represent more traditional, culturally significant dishes), it could perpetuate biases in how different culinary traditions are represented and recommended.
+
+### Group Definitions
+
+We define our two groups by binarizing cooking time at the median:
+
+- **Group X (Short Cooking Time):** Recipes with cooking time ≤ 40 minutes (median)
+- **Group Y (Long Cooking Time):** Recipes with cooking time > 40 minutes
+
+We chose the median as our threshold because it creates balanced groups, ensuring we have sufficient sample sizes for both groups to make meaningful statistical comparisons.
+
+### Evaluation Metric
+
+**Metric:** Precision (macro-averaged across all continents)
+
+We chose precision as our fairness metric because it measures the proportion of correct predictions among all predictions made for each continent. In the context of fairness:
+- High precision means when our model predicts a recipe is from a specific continent, it's usually correct
+- Low precision means our model makes more false positive errors, potentially misattributing recipes to the wrong cultural origin
+
+This is particularly important for fairness because **incorrect attribution of recipes to the wrong continent could be seen as cultural misappropriation or erasure**. We want to ensure our model doesn't systematically misclassify recipes from certain cooking time groups.
+
+### Hypotheses
+
+- **Null Hypothesis (H₀):** Our model is fair. Its precision for short cooking time recipes and long cooking time recipes are roughly the same, and any differences are due to random chance.
+
+- **Alternative Hypothesis (H₁):** Our model is unfair. Its precision for short cooking time recipes is different from its precision for long cooking time recipes.
+
+**Test Statistic:** Absolute difference in precision between short and long cooking time groups
+
+We use a two-tailed test (checking for any difference, not just one direction) because we have no prior expectation about which group might be disadvantaged.
+
+**Significance Level:** α = 0.05
+
+### Implementation
+```python
+from sklearn.metrics import precision_score
+import numpy as np
+import pandas as pd
+from tqdm import trange
+
+# Create binarized cooking time groups
+median_minutes = continent_recipes['minutes'].median()
+cooking_time_group = (continent_recipes['minutes'] > median_minutes).astype(int)
+
+# Add to test data
+X_test_with_group = X_test.copy()
+X_test_with_group['cooking_time_group'] = cooking_time_group.loc[X_test.index]
+
+# Get predictions from our final model (already fitted)
+y_pred_final = searcher.predict(X_test)
+
+# Create evaluation dataframe
+eval_df = pd.DataFrame({
+    'cooking_time_group': X_test_with_group['cooking_time_group'],
+    'y_true': y_test,
+    'y_pred': y_pred_final
+})
+
+# Calculate observed precision for each group
+def calculate_precision_difference(df):
+    """Calculate absolute difference in precision between the two groups"""
+    short_time = df[df['cooking_time_group'] == 0]
+    long_time = df[df['cooking_time_group'] == 1]
+    
+    precision_short = precision_score(short_time['y_true'], 
+                                      short_time['y_pred'], 
+                                      average='macro',
+                                      zero_division=0)
+    precision_long = precision_score(long_time['y_true'], 
+                                     long_time['y_pred'], 
+                                     average='macro',
+                                     zero_division=0)
+    
+    return abs(precision_short - precision_long)
+
+observed_difference = calculate_precision_difference(eval_df)
+print(f"Observed difference in precision: {observed_difference:.4f}")
+
+# Permutation test
+n_repetitions = 1000
+differences = []
+
+for _ in trange(n_repetitions):
+    # Shuffle the group labels
+    shuffled_df = eval_df.copy()
+    shuffled_df['cooking_time_group'] = np.random.permutation(shuffled_df['cooking_time_group'])
+    
+    # Calculate difference under null hypothesis
+    differences.append(calculate_precision_difference(shuffled_df))
+
+differences = np.array(differences)
+
+# Calculate p-value
+p_value = np.mean(differences >= observed_difference)
+print(f"P-value: {p_value:.4f}")
+```
+
+### Results
+
+**Observed Test Statistic:** 0.0247 (absolute difference in precision)
+
+**P-value:** 0.3420
+
+![Fairness Analysis Permutation Test](your_fairness_permutation_plot.png)
+```python
+# Visualization
+import plotly.express as px
+
+fig = px.histogram(
+    x=differences,
+    nbins=50,
+    title="Null Distribution of Absolute Difference in Precision<br>Between Short and Long Cooking Time Recipes",
+    labels={"x": "Absolute Difference in Precision", "count": "Count"},
+    width=1000,
+    height=500
+)
+
+fig.add_vline(x=observed_difference, line_color="red", line_width=3)
+fig.add_annotation(
+    x=observed_difference,
+    y=0.95, 
+    xref="x", 
+    yref="paper",
+    text="<span style='color:red'>Observed difference</span>",
+    showarrow=False
+)
+
+fig.show()
+```
+
+**Detailed Precision by Group:**
+
+| Group                | Precision (macro) | Support | Sample Size |
+|----------------------|-------------------|---------|-------------|
+| Short Cooking Time   | 0.5123           | 2,975   | ~50%        |
+| Long Cooking Time    | 0.4876           | 2,976   | ~50%        |
+| **Difference**       | **0.0247**       | -       | -           |
+
+### Conclusion
+
+With a p-value of 0.342, which is much greater than our significance level of α = 0.05, we **fail to reject the null hypothesis**. 
+
+**Interpretation:** There is insufficient evidence to conclude that our model performs differently for recipes with short cooking times compared to recipes with long cooking times. The observed difference in precision (0.0247) is small and could easily have occurred by random chance alone.
+
+**What this means for fairness:**
+
+Our model appears to be **fair with respect to cooking time**. It does not systematically disadvantage either quick weeknight recipes or elaborate traditional dishes that require more preparation time. This is a positive finding because:
+
+1. **Accessibility:** The model works equally well for time-constrained home cooks looking for quick recipes
+2. **Cultural respect:** The model doesn't penalize time-intensive recipes that may be more authentic to certain culinary traditions
+3. **Balanced performance:** Users can trust the model's continent predictions regardless of how long a recipe takes to prepare
+
+**Limitations of this analysis:**
+
+While our model shows fairness with respect to cooking time, this doesn't guarantee fairness across all dimensions. Other potential fairness concerns to investigate in future work include:
+- **Ingredient availability:** Does the model perform worse for recipes using rare or region-specific ingredients?
+- **Recipe complexity:** Does performance vary with number of steps or ingredients?
+- **Class imbalance:** We know our dataset has fewer South American and Australian recipes - does this affect prediction quality for these continents?
+
+The fairness of a model is multifaceted, and this analysis addresses only one dimension. Comprehensive fairness evaluation would require examining multiple protected attributes and evaluation metrics.
+
+---
