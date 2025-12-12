@@ -48,12 +48,22 @@ Describe, in detail, the data cleaning steps you took and how they affected your
  'one-dish-meal', 'inexpensive']
 ```
 **Head of cleaned DataFrame:**
+The table was broken into two dataframes-recipe data and nutritional information-for readibility. 
 
-| id      | continent_of_origin | name                              | minutes | n_steps | n_ingredients | avg_rating | calories | total_fat | sugar | sodium | protein | saturated_fat | carbohydrates |
-|---------|---------------------|-----------------------------------|---------|---------|---------------|------------|----------|-----------|-------|--------|---------|---------------|---------------|
-| 453467  | north-american      | 1 in canada chocolate chip cookies| 40      | 12      | 9             | 5.0        | 595.1    | 46.0      | 211.0 | 22.0   | 13.0    | 51.0          | 26.0          |
-| 286009  | north-american      | millionaire pound cake            | 120     | 7       | 7             | 5.0        | 878.3    | 63.0      | 326.0 | 13.0   | 20.0    | 123.0         | 39.0          |
-| 333797  | north-american      | after med flsk pea soup with pork | 85      | 11      | 12            | 5.0        | 267.8    | 20.0      | 7.0   | 34.0   | 44.0    | 12.0          | 0.0           |
+| id | continent_of_origin | name | minutes | n_steps | n_ingredients | avg_rating |
+|----|---------------------|------|---------|---------|---------------|------------|
+| 453467 | north-american | 1 in canada chocolate chip cookies | 40 | 12 | 9 | 5.0 |
+| 286009 | north-american | millionaire pound cake | 120 | 7 | 7 | 5.0 |
+| 333797 | north-american | after med flsk pea soup with pork | 85 | 11 | 12 | 5.0 |
+
+
+| calories | total_fat | sugar | sodium | protein | saturated_fat | carbohydrates |
+|----------|-----------|-------|--------|---------|---------------|---------------|
+| 595.1 | 46.0 | 211.0 | 22.0 | 13.0 | 51.0 | 26.0 |
+| 878.3 | 63.0 | 326.0 | 13.0 | 20.0 | 123.0 | 39.0 |
+| 267.8 | 20.0 | 7.0 | 34.0 | 44.0 | 12.0 | 0.0 |
+
+
 
 ### Distribution of Average Ratings in Recipes
 
