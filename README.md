@@ -1,4 +1,4 @@
-# recipes-predictive-project
+# Predicting Recipe Origin from Ingredients
 
 by Coleman Clougherty (cclougherty@ucsd.edu) and Jamera Mellyn Fernando (jmfernando@ucsd.edu)
 
@@ -409,22 +409,11 @@ We evaluated our baseline model using macro-averaged F1-score, which balances pr
 
 ### Model Assessment
 
+![Baseline Confusion Matrix](visualizations/baseline_confusion_matrix.svg)
+
 **Is this a "good" model?**
+Our baseline model achieves a macro F1-score of 0.34, which is above random guessing (≈0.17 for six classes) but still relatively low. This indicates that while the model captures some signal, it struggles to perform consistently across all continents. In particular, performance is heavily influenced by class imbalance: the model achieves high recall for the majority class (North American) but performs poorly on minority classes such as Australian and South American recipes, as reflected by near-zero recall for these categories. As a result, the macro-averaged F1-score—which weights all classes equally—remains low despite a higher overall accuracy. Therefore, this model is not “good” in the sense of reliable multi-class classification, but it serves as a reasonable baseline that highlights the challenges posed by class imbalance and motivates the need for more balanced features or modeling approaches.
 
-Our baseline model achieves a macro F1-score of 0.3402, which is slightly better than random guessing (1/6 ≈ 0.17 for 6 classes) but leaves substantial room for improvement. 
-
-**Strengths:**
-- Successfully leverages ingredient information to make meaningful predictions
-- Performs well on North American and Asian recipes (F1-scores of 0.65 and 0.59)
-- Better than random guessing across all classes
-
-**Weaknesses:**
-- Poor performance on minority classes (South American: 0.32, Australian: 0.38, African: 0.41)
-- Doesn't account for feature interactions or non-linear relationships beyond what Random Forest captures
-- Treats all numerical features at their original scale, which may disadvantage features with smaller ranges
-- Doesn't capture the skewed distribution of cooking times or other numerical features
-
-The baseline model provides a reasonable starting point but clearly has room for improvement through feature engineering, better handling of class imbalance, and hyperparameter tuning.
 
 ---
 
@@ -515,9 +504,9 @@ Improvement:               -0.0303
 | **macro avg**    | **0.60**  | **0.29**| **0.31** | **5951**|
 | **weighted avg** | 0.60      | 0.60   | 0.54     | 5951    |
 
-![Final Model Confusion Matrix](your_final_confusion_matrix.png)
+![Final Model Confusion Matrix](visualizations/confusion_matrix_classif.svg)
 
-### Analysis: Why Did Performance Decrease?
+### Analysis: Why Performance Decreased
 
 Surprisingly, our final model performed **worse** than our baseline model, with the macro F1-score dropping from 0.34 to 0.31. This unexpected result reveals several important insights:
 
@@ -545,13 +534,7 @@ However, that does not mean our model only performed poorly. Our model had high 
 
 ### Potential Improvements for Future Work
 
-To improve upon both models, we could:
-
-1. **Address class imbalance directly:** Using `class_weight='balanced'` in RandomForest, implementing oversampling techniques, and using stratified sampling in cross-validation
-
-2. **Try different feature engineering:** Creating binary indicators for signature ingredients (e.g., "has_soy_sauce" for Asian), using TF-IDF on ingredients instead of MultiLabelBinarizer
-
-3. **Experiment with different algorithms:** Gradient boosting (XGBoost, LightGBM) may handle imbalance better
+To improve upon both models, we could: 1) **Address class imbalance directly:** Using `class_weight='balanced'` in RandomForest, implementing oversampling techniques, and using stratified sampling in cross-validation 2) **Try different feature engineering:** Creating binary indicators for signature ingredients (e.g., "has_soy_sauce" for Asian), using TF-IDF on ingredients instead of MultiLabelBinarizer 3) **Experiment with different algorithms:** Gradient boosting (XGBoost, LightGBM) may handle imbalance better
 
 ---
 
@@ -594,132 +577,28 @@ We use a two-tailed test (checking for any difference, not just one direction) b
 
 **Significance Level:** α = 0.05
 
-### Implementation
-```python
-from sklearn.metrics import precision_score
-import numpy as np
-import pandas as pd
-from tqdm import trange
-
-# Create binarized cooking time groups
-median_minutes = continent_recipes['minutes'].median()
-cooking_time_group = (continent_recipes['minutes'] > median_minutes).astype(int)
-
-# Add to test data
-X_test_with_group = X_test.copy()
-X_test_with_group['cooking_time_group'] = cooking_time_group.loc[X_test.index]
-
-# Get predictions from our final model (already fitted)
-y_pred_final = searcher.predict(X_test)
-
-# Create evaluation dataframe
-eval_df = pd.DataFrame({
-    'cooking_time_group': X_test_with_group['cooking_time_group'],
-    'y_true': y_test,
-    'y_pred': y_pred_final
-})
-
-# Calculate observed precision for each group
-def calculate_precision_difference(df):
-    """Calculate absolute difference in precision between the two groups"""
-    short_time = df[df['cooking_time_group'] == 0]
-    long_time = df[df['cooking_time_group'] == 1]
-    
-    precision_short = precision_score(short_time['y_true'], 
-                                      short_time['y_pred'], 
-                                      average='macro',
-                                      zero_division=0)
-    precision_long = precision_score(long_time['y_true'], 
-                                     long_time['y_pred'], 
-                                     average='macro',
-                                     zero_division=0)
-    
-    return abs(precision_short - precision_long)
-
-observed_difference = calculate_precision_difference(eval_df)
-print(f"Observed difference in precision: {observed_difference:.4f}")
-
-# Permutation test
-n_repetitions = 1000
-differences = []
-
-for _ in trange(n_repetitions):
-    # Shuffle the group labels
-    shuffled_df = eval_df.copy()
-    shuffled_df['cooking_time_group'] = np.random.permutation(shuffled_df['cooking_time_group'])
-    
-    # Calculate difference under null hypothesis
-    differences.append(calculate_precision_difference(shuffled_df))
-
-differences = np.array(differences)
-
-# Calculate p-value
-p_value = np.mean(differences >= observed_difference)
-print(f"P-value: {p_value:.4f}")
-```
-
 ### Results
 
-**Observed Test Statistic:** 0.0247 (absolute difference in precision)
+**Observed Test Statistic:** 0.1153 (absolute difference in precision)
 
-**P-value:** 0.3420
+**P-value:** 0.1160
 
-![Fairness Analysis Permutation Test](your_fairness_permutation_plot.png)
-```python
-# Visualization
-import plotly.express as px
+![Fairness Analysis Permutation Test](visualizations/diff_in_precision.png)
 
-fig = px.histogram(
-    x=differences,
-    nbins=50,
-    title="Null Distribution of Absolute Difference in Precision<br>Between Short and Long Cooking Time Recipes",
-    labels={"x": "Absolute Difference in Precision", "count": "Count"},
-    width=1000,
-    height=500
-)
 
-fig.add_vline(x=observed_difference, line_color="red", line_width=3)
-fig.add_annotation(
-    x=observed_difference,
-    y=0.95, 
-    xref="x", 
-    yref="paper",
-    text="<span style='color:red'>Observed difference</span>",
-    showarrow=False
-)
+**Detailed Precision by Group**
 
-fig.show()
-```
+| Group               | Precision (macro) | Support | Sample Size |
+|---------------------|-------------------|---------|-------------|
+| Short Cooking Time  | 0.5684            | 3,240   | 54%         |
+| Long Cooking Time   | 0.4531            | 2,711   | 46%         |
+| **Difference**      | **0.1153**        | –       | –           |
 
-**Detailed Precision by Group:**
-
-| Group                | Precision (macro) | Support | Sample Size |
-|----------------------|-------------------|---------|-------------|
-| Short Cooking Time   | 0.5123           | 2,975   | ~50%        |
-| Long Cooking Time    | 0.4876           | 2,976   | ~50%        |
-| **Difference**       | **0.0247**       | -       | -           |
 
 ### Conclusion
 
-With a p-value of 0.342, which is much greater than our significance level of α = 0.05, we **fail to reject the null hypothesis**. 
+With a p-value of 0.1160, which exceeds our significance level of α = 0.05, we **fail to reject the null hypothesis** and do not find statistically significant evidence that the model’s precision differs between recipes with short versus long cooking times.
 
-**Interpretation:** There is insufficient evidence to conclude that our model performs differently for recipes with short cooking times compared to recipes with long cooking times. The observed difference in precision (0.0247) is small and could easily have occurred by random chance alone.
-
-**What this means for fairness:**
-
-Our model appears to be **fair with respect to cooking time**. It does not systematically disadvantage either quick weeknight recipes or elaborate traditional dishes that require more preparation time. This is a positive finding because:
-
-1. **Accessibility:** The model works equally well for time-constrained home cooks looking for quick recipes
-2. **Cultural respect:** The model doesn't penalize time-intensive recipes that may be more authentic to certain culinary traditions
-3. **Balanced performance:** Users can trust the model's continent predictions regardless of how long a recipe takes to prepare
-
-**Limitations of this analysis:**
-
-While our model shows fairness with respect to cooking time, this doesn't guarantee fairness across all dimensions. Other potential fairness concerns to investigate in future work include:
-- **Ingredient availability:** Does the model perform worse for recipes using rare or region-specific ingredients?
-- **Recipe complexity:** Does performance vary with number of steps or ingredients?
-- **Class imbalance:** We know our dataset has fewer South American and Australian recipes - does this affect prediction quality for these continents?
-
-The fairness of a model is multifaceted, and this analysis addresses only one dimension. Comprehensive fairness evaluation would require examining multiple protected attributes and evaluation metrics.
+Overall, this analysis provides **no strong evidence of unfairness with respect to cooking time**: the model does not appear to systematically favor quick recipes over more time-intensive ones, or vice versa, in terms of precision. However, failing to reject the null hypothesis does not guarantee fairness. This conclusion is limited to a single performance metric (macro precision) and a single grouping variable, and the test may lack sufficient power to detect more subtle disparities, particularly given class imbalance in the dataset. A more comprehensive fairness assessment would require examining additional metrics (e.g., recall or F1-score) and other potential sources of bias, such as recipe complexity or ingredient availability.
 
 ---
