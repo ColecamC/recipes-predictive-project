@@ -451,13 +451,17 @@ Before conducting our grid search, we identified the following hyperparameters t
 3. **`min_samples_split`**
 4. **`criterion`**: ['gini']
 
-We used `GridSearchCV` with 3-fold cross-validation to systematically evaluate all 27 combinations of hyperparameters.
+We used `GridSearchCV` with 3-fold cross-validation to systematically evaluate the best F1-score. We used many different hyperparameters, here is one of the sets we tested with.
 ```python
 hyperparameters = {
-    'RandomForest__n_estimators': [75, 100, 150],
-    'RandomForest__max_depth': [None, 20, 30],
-    'RandomForest__min_samples_split': [25, 50, 100],
-    'RandomForest__criterion': ['gini']
+    'RandomForest__criterion': ['gini'],
+    'RandomForest__max_depth': [None],
+    'RandomForest__max_features': ['sqrt'],
+    'RandomForest__min_samples_split': [50, 100],
+    'RandomForest__n_estimators': [10, 50, 100],
+    'RandomForest__class_weight': ['balanced_subsample', 'balanced']
+   #  'RandomForest__min_samples_split': [50, 100],
+   #  'RandomForest__n_estimators': [10, 20, 100]
 }
 
 searcher = GridSearchCV(
@@ -474,67 +478,63 @@ searcher.fit(X_train, y_train)
 
 **Best Hyperparameters Found:**
 ```python
+
 {
-    'RandomForest__criterion': 'gini',
-    'RandomForest__max_depth': 30,
-    'RandomForest__min_samples_split': 100,
-    'RandomForest__n_estimators': 150
-}
+   'RandomForest__class_weight': 'balanced_subsample', 
+   'RandomForest__criterion': 'gini', 
+   'RandomForest__max_depth': None, 
+   'RandomForest__max_features': 'sqrt', 
+   'RandomForest__min_samples_split': 50, 
+   'RandomForest__n_estimators': 100}
 ```
 
 ### Model Performance
 ```
 ==================================================
 BASELINE F1-Score (macro): 0.3402
-FINAL F1-Score (macro):    0.3099
-Improvement:               -0.0303
+FINAL F1-Score (macro):    0.3770
+Improvement:               0.0368
 ==================================================
 ```
 
 **Classification Report:**
+  precision    recall  f1-score   support
+
+       african       0.21      0.34      0.26       237
+         asian       0.47      0.64      0.54       829
+    australian       0.21      0.26      0.23       196
+      european       0.47      0.56      0.51      1614
+north-american       0.71      0.52      0.60      2942
+south-american       0.11      0.14      0.12       133
+
+      accuracy                           0.52      5951
+     macro avg       0.36      0.41      0.38      5951
+  weighted avg       0.56      0.52      0.53      5951
 
 | Continent        | Precision | Recall | F1-Score | Support |
 |------------------|-----------|--------|----------|---------|
-| african          | 0.66      | 0.08   | 0.14     | 237     |
-| asian            | 0.75      | 0.43   | 0.55     | 829     |
-| australian       | 0.00      | 0.00   | 0.00     | 196     |
-| european         | 0.59      | 0.30   | 0.40     | 1614    |
-| north-american   | 0.58      | 0.91   | 0.71     | 2942    |
-| south-american   | 1.00      | 0.03   | 0.06     | 133     |
-| **macro avg**    | **0.60**  | **0.29**| **0.31** | **5951**|
-| **weighted avg** | 0.60      | 0.60   | 0.54     | 5951    |
+| african          | 0.21      | 0.34   | 0.26     | 237     |
+| asian            | 0.47      | 0.64   | 0.54     | 829     |
+| australian       | 0.21      | 0.26   | 0.23     | 196     |
+| european         | 0.47      | 0.56   | 0.51     | 1614    |
+| north-american   | 0.71      | 0.52   | 0.60     | 2942    |
+| south-american   | 0.11      | 0.14   | 0.12     | 133     |
+| **macro avg**    | **0.36**  | **0.41**| **0.0.38** | **5951**|
+| **weighted avg** | 0.56      | 0.52   | 0.53     | 5951    |
 
-![Final Model Confusion Matrix](visualizations/confusion_matrix_classif.svg)
+![Final Model Confusion Matrix](visualizations/final_confusion_matrix.svg)
 
-### Analysis: Why Performance Decreased
+### Analysis: Why Performance Increased
 
-Surprisingly, our final model performed **worse** than our baseline model, with the macro F1-score dropping from 0.34 to 0.31. This unexpected result reveals several important insights:
+While the final model did not improve on the baseline greatly, tehre was still an improvement. We can see the fiagonal entries in the confusion matrix for correct predictions is much higher. We can also see that the model doesn't simply predict North America as much. The recall in the continents with fewer recipes increased. The most common prediction for recipes from Africa, Asia, Europe, and North America are their correct labels. The model still has difficult correctly predicting Australia and South America, which are unsurprisingly the continents with the least data. While the scores and metrics don't show a huge improvement, the confusion matrix shows promising results.
 
-**1. Overfitting to the Majority Class**
+Clearly there are some standout issues with how both models predict.
 
-The confusion matrix shows our model has become extremely biased toward predicting "north-american":
-- **Recall for north-american: 0.91** (predicts almost everything as north-american)
-- **Recall for minority classes: near 0** (rarely predicts african, australian, south-american)
-
-This suggests our feature engineering and hyperparameter tuning inadvertently increased the model's bias toward the majority class.
-
-**2. Feature Engineering May Have Introduced Noise**
-
-Our engineered features may have had unintended effects. **Log-transformed minutes:** While this normalized the distribution, it may have obscured meaningful patterns in cooking time that differentiated cuisines. **Calorie density:** This feature may not be as discriminative as we hypothesized since many cuisines share similar calorie-to-ingredient ratios. **Fat-sugar interaction:** May have primarily helped identify desserts but didn't help distinguish between continents
-
-**3. Hyperparameter Tuning**
-
-Our best hyperparameters (`max_depth=30`, `min_samples_split=100`) created a shallower, more constrained model that focuses on the most common patterns (north-american recipes), failing to capture other continents. This may have reduced the model's ability to learn distinctive patterns for smaller classes.
-
-**4. Class Imbalance**
-
-With north-american recipes comprising ~49% of our training data while south-american comprises only ~2%, our model optimization focused on overall accuracy rather than balanced performance across continents.
-
-However, that does not mean our model only performed poorly. Our model had high precision for asian (0.75) and african (0.66) recipes when they are predicted. There was also perfect precision for south-american (1.00), even though only 3% recall means it rarely makes this prediction. As a whole, the model had ignored the australian recipes entirely (0.00 F1-score), and overpredicted north-american dishes at the expense of other continents. 
+For instance, The confusion matrices for both models show a bias toward predicting North America.
 
 ### Potential Improvements for Future Work
 
-To improve upon both models, we could: 1) **Address class imbalance directly:** Using `class_weight='balanced'` in RandomForest, implementing oversampling techniques, and using stratified sampling in cross-validation 2) **Try different feature engineering:** Creating binary indicators for signature ingredients (e.g., "has_soy_sauce" for Asian), using TF-IDF on ingredients instead of MultiLabelBinarizer 3) **Experiment with different algorithms:** Gradient boosting (XGBoost, LightGBM) may handle imbalance better
+To improve upon our model, we could: 1) **Try different feature engineering:** Creating binary indicators for signature ingredients (e.g., "has_soy_sauce" for Asian), using TF-IDF on ingredients instead of MultiLabelBinarizer 2) **Experiment with different algorithms:** Gradient boosting (XGBoost, LightGBM) showed up online when we were researching on how to improve the model. They may handle imbalance better
 
 ---
 
